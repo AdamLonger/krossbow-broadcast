@@ -1,23 +1,35 @@
 plugins {
-    id("krossbow-jvm")
-    id("krossbow-publish")
-    id("websocket-test-server")
+    kotlin("jvm")
+    `maven-publish`
 }
 
 description = "A Krossbow adapter for OkHttp's WebSocket client"
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
 kotlin {
-    compilerOptions.optIn.add("org.hildan.krossbow.io.InternalKrossbowIoApi")
+    compilerOptions {
+        optIn.add("org.hildan.krossbow.io.InternalKrossbowIoApi")
+    }
 }
 
 dependencies {
     api(projects.krossbowWebsocketCore)
     api(libs.okhttp)
     implementation(projects.krossbowIo)
-
-    testImplementation(kotlin("test"))
-    testImplementation(projects.krossbowWebsocketTest)
 }
 
-// using "latest" because not all versions are published (e.g. 4.x.x are not published)
-dokkaExternalDocLink("https://javadoc.io/doc/com.squareup.okhttp3/okhttp/latest/")
+publishing {
+    publications {
+        create<MavenPublication>(name.removePrefix("krossbow-")) {
+            groupId = extra.get("publishGroupId") as String
+            artifactId = name.removePrefix("krossbow-")
+            version = extra.get("publishVersion") as String
+
+            from(components["java"])
+        }
+    }
+}

@@ -1,21 +1,27 @@
 plugins {
-    id("krossbow-multiplatform")
-    id("krossbow-publish")
+    kotlin("jvm")
+    `maven-publish`
 }
 
 description = "Internal IO utilities for kotlinx-io conversions"
 
-kotlin {
-    allTargets()
-    sourceSets {
-        val commonMain by getting {
-            dependencies {
-                api(libs.kotlinx.io.bytestring)
-            }
-        }
-    }
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
 }
 
-apiValidation {
-    nonPublicMarkers += listOf("org.hildan.krossbow.io.InternalKrossbowIoApi")
+dependencies {
+    implementation(libs.kotlinx.io.bytestring)
+}
+
+publishing {
+    publications {
+        create<MavenPublication>(name.removePrefix("krossbow-")) {
+            groupId = extra.get("publishGroupId") as String
+            artifactId = name.removePrefix("krossbow-")
+            version = extra.get("publishVersion") as String
+
+            from(components["java"])
+        }
+    }
 }

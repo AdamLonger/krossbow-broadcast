@@ -1,4 +1,0 @@
-public final class org/hildan/krossbow/websocket/spring/SpringWebSocketClientKt {
-	public static final fun asKrossbowWebSocketClient (Lorg/springframework/web/socket/client/WebSocketClient;)Lorg/hildan/krossbow/websocket/WebSocketClient;
-}
-

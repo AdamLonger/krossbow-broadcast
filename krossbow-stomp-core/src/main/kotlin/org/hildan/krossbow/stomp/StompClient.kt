@@ -2,6 +2,9 @@ package org.hildan.krossbow.stomp
 
 import kotlinx.coroutines.*
 import org.hildan.krossbow.stomp.config.*
+import org.hildan.krossbow.stomp.session.broadcast.BroadcastStompSession
+import org.hildan.krossbow.stomp.session.StompSession
+import org.hildan.krossbow.stomp.session.topic.TopicStompSession
 import org.hildan.krossbow.stomp.version.*
 import org.hildan.krossbow.websocket.*
 import kotlin.coroutines.*
@@ -39,10 +42,10 @@ class StompClient(
      *
      * If some [customStompConnectHeaders] are provided, they are included in the CONNECT (or STOMP) frame and might be
      * used by the server for various usages, e.g. Authorization. Note that this frame is a STOMP-level frame, and is
-     * sent after the web socket handshake. The [customStompConnectHeaders] are not sent during the web socket 
+     * sent after the web socket handshake. The [customStompConnectHeaders] are not sent during the web socket
      * handshake itself.
-     * If you need to sent custom headers in the web socket handshake, use the [WebSocketClient] directly to establish 
-     * the web socket connection (with custom headers), and then perform the STOMP handshake as a second step over the 
+     * If you need to sent custom headers in the web socket handshake, use the [WebSocketClient] directly to establish
+     * the web socket connection (with custom headers), and then perform the STOMP handshake as a second step over the
      * existing web socket connection using [WebSocketConnection.stomp].
      *
      * The `host` header of the CONNECT (or STOMP) frame can be customized via the [host] parameter.
@@ -66,13 +69,38 @@ class StompClient(
         host: String? = DefaultHost,
         customStompConnectHeaders: Map<String, String> = emptyMap(),
         sessionCoroutineContext: CoroutineContext = EmptyCoroutineContext,
-    ): StompSession {
+    ): TopicStompSession {
         val session = withTimeoutOrNull(config.connectionTimeout) {
             val webSocket = webSocketClient.connect(
                 url = url,
                 protocols = StompVersion.preferredOrder.map { it.wsSubprotocolId },
             )
             webSocket.stomp(
+                config = config,
+                host = host,
+                login = login,
+                passcode = passcode,
+                customHeaders = customStompConnectHeaders,
+                sessionCoroutineContext = sessionCoroutineContext,
+            )
+        }
+        return session ?: throw ConnectionTimeout(url, config.connectionTimeout)
+    }
+
+    suspend fun connectBroadcast(
+        url: String,
+        login: String? = null,
+        passcode: String? = null,
+        host: String? = DefaultHost,
+        customStompConnectHeaders: Map<String, String> = emptyMap(),
+        sessionCoroutineContext: CoroutineContext = EmptyCoroutineContext,
+    ): BroadcastStompSession {
+        val session = withTimeoutOrNull(config.connectionTimeout) {
+            val webSocket = webSocketClient.connect(
+                url = url,
+                protocols = StompVersion.preferredOrder.map { it.wsSubprotocolId },
+            )
+            webSocket.stompBroadcast(
                 config = config,
                 host = host,
                 login = login,
@@ -121,9 +149,14 @@ open class WebSocketConnectionException(
  * Exception thrown when the connection attempt failed at STOMP protocol level.
  */
 class StompConnectionException(val host: String?, cause: Throwable? = null) :
-    ConnectionException(host ?: "null", "Failed to connect at STOMP protocol level to host '$host'", cause)
+    ConnectionException(
+        host ?: "null",
+        "Failed to connect at STOMP protocol level to host '$host'",
+        cause
+    )
 
 /**
  * Exception thrown when something went wrong during the connection.
  */
-open class ConnectionException(val url: String, message: String, cause: Throwable? = null) : Exception(message, cause)
+open class ConnectionException(val url: String, message: String, cause: Throwable? = null) :
+    Exception(message, cause)

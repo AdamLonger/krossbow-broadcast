@@ -6,6 +6,12 @@ import org.hildan.krossbow.stomp.config.*
 import org.hildan.krossbow.stomp.frame.*
 import org.hildan.krossbow.stomp.headers.*
 import org.hildan.krossbow.stomp.heartbeats.*
+import org.hildan.krossbow.stomp.session.BaseStompSession
+import org.hildan.krossbow.stomp.session.StompSession
+import org.hildan.krossbow.stomp.session.broadcast.BaseBroadcastStompSession
+import org.hildan.krossbow.stomp.session.broadcast.BroadcastStompSession
+import org.hildan.krossbow.stomp.session.topic.BaseTopicStompSession
+import org.hildan.krossbow.stomp.session.topic.TopicStompSession
 import org.hildan.krossbow.stomp.version.*
 import org.hildan.krossbow.websocket.*
 import kotlin.coroutines.*
@@ -15,7 +21,8 @@ import kotlin.coroutines.*
  * when actually connecting. This constant is necessary because we want to allow `null` as a user-provided value (which
  * should be distinguishable from the default).
  */
-internal const val DefaultHost = "<default host header>" // invalid host value to prevent conflicts with real hosts 
+internal const val DefaultHost =
+    "<default host header>" // invalid host value to prevent conflicts with real hosts
 
 /**
  * Establishes a STOMP session over an existing [WebSocketConnection].
@@ -38,24 +45,61 @@ suspend fun WebSocketConnection.stomp(
     passcode: String? = null,
     customHeaders: Map<String, String> = emptyMap(),
     sessionCoroutineContext: CoroutineContext = EmptyCoroutineContext,
-): StompSession {
+): TopicStompSession {
     val wsStompVersion = StompVersion.fromWsProtocol(protocol)
     val serverPossiblySupportsHost = wsStompVersion == null || wsStompVersion.supportsHostHeader
-    val effectiveHost = if (host == DefaultHost) this.host.takeIf { serverPossiblySupportsHost } else host
+    val effectiveHost =
+        if (host == DefaultHost) this.host.takeIf { serverPossiblySupportsHost } else host
     val connectHeaders = StompConnectHeaders(host = effectiveHost) {
         this.login = login
         this.passcode = passcode
         this.heartBeat = config.heartBeat
         setAll(customHeaders)
     }
-    return stomp(config, connectHeaders, sessionCoroutineContext)
+
+    return stomp(
+        config = config,
+        headers = connectHeaders,
+        sessionCoroutineContext = sessionCoroutineContext
+    ) { conf, stompSocket, negotiatedHeartBeat, contextOverrides ->
+        BaseTopicStompSession(conf, stompSocket, negotiatedHeartBeat, contextOverrides)
+    }
 }
 
-private suspend fun WebSocketConnection.stomp(
+suspend fun WebSocketConnection.stompBroadcast(
+    config: StompConfig,
+    host: String? = DefaultHost,
+    login: String? = null,
+    passcode: String? = null,
+    customHeaders: Map<String, String> = emptyMap(),
+    sessionCoroutineContext: CoroutineContext = EmptyCoroutineContext,
+): BroadcastStompSession {
+    val wsStompVersion = StompVersion.fromWsProtocol(protocol)
+    val serverPossiblySupportsHost = wsStompVersion == null || wsStompVersion.supportsHostHeader
+    val effectiveHost =
+        if (host == DefaultHost) this.host.takeIf { serverPossiblySupportsHost } else host
+    val connectHeaders = StompConnectHeaders(host = effectiveHost) {
+        this.login = login
+        this.passcode = passcode
+        this.heartBeat = config.heartBeat
+        setAll(customHeaders)
+    }
+
+    return stomp(
+        config = config,
+        headers = connectHeaders,
+        sessionCoroutineContext = sessionCoroutineContext
+    ) { conf, stompSocket, negotiatedHeartBeat, contextOverrides ->
+        BaseBroadcastStompSession(conf, stompSocket, negotiatedHeartBeat, contextOverrides)
+    }
+}
+
+private suspend fun <T> WebSocketConnection.stomp(
     config: StompConfig,
     headers: StompConnectHeaders,
     sessionCoroutineContext: CoroutineContext,
-): StompSession {
+    sessionBuilder: (StompConfig, StompSocket, HeartBeat, CoroutineContext) -> T
+): T {
     val stompSocket = StompSocket(this, config)
     try {
         val connectedFrame = withTimeoutOrNull(config.connectionTimeout) {
@@ -67,14 +111,14 @@ private suspend fun WebSocketConnection.stomp(
             val realStompVersion = StompVersion.fromConnectedFrame(connectedFrame.headers.version)
             check(wsStompVersion == null || wsStompVersion == realStompVersion) {
                 "negotiated STOMP version mismatch: " +
-                    "$wsStompVersion at web socket level (subprotocol '$protocol'), " +
-                    "$realStompVersion at STOMP level"
+                        "$wsStompVersion at web socket level (subprotocol '$protocol'), " +
+                        "$realStompVersion at STOMP level"
             }
         }
-        
+
         val negotiatedHeartBeat = config.heartBeat.negotiated(connectedFrame.headers.heartBeat)
         val contextOverrides = config.defaultSessionCoroutineContext + sessionCoroutineContext
-        return BaseStompSession(config, stompSocket, negotiatedHeartBeat, contextOverrides)
+        return sessionBuilder(config, stompSocket, negotiatedHeartBeat, contextOverrides)
     } catch (e: CancellationException) {
         withContext(NonCancellable) {
             stompSocket.close(e)

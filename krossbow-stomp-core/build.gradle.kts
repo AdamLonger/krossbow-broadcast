@@ -24,6 +24,7 @@ dependencies {
     implementation(projects.krossbowIo)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.io.core)
+    implementation("org.jetbrains.kotlinx:kotlinx-collections-immutable:0.3.8")
 }
 
 publishing {

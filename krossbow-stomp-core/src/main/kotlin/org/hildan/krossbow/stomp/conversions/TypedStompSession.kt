@@ -2,8 +2,8 @@ package org.hildan.krossbow.stomp.conversions
 
 import kotlinx.coroutines.flow.Flow
 import org.hildan.krossbow.stomp.LostReceiptException
-import org.hildan.krossbow.stomp.StompReceipt
-import org.hildan.krossbow.stomp.StompSession
+import org.hildan.krossbow.stomp.session.StompReceipt
+import org.hildan.krossbow.stomp.session.StompSession
 import org.hildan.krossbow.stomp.config.StompConfig
 import org.hildan.krossbow.stomp.frame.StompFrame
 import org.hildan.krossbow.stomp.headers.StompSendHeaders

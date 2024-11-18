@@ -2,18 +2,23 @@ package org.hildan.krossbow.stomp.conversions.text
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import org.hildan.krossbow.stomp.StompReceipt
-import org.hildan.krossbow.stomp.StompSession
-import org.hildan.krossbow.stomp.charsets.*
+import org.hildan.krossbow.stomp.charsets.Charset
+import org.hildan.krossbow.stomp.charsets.encodeToByteString
+import org.hildan.krossbow.stomp.charsets.extractCharset
 import org.hildan.krossbow.stomp.conversions.KTypeRef
 import org.hildan.krossbow.stomp.conversions.TypedStompSession
 import org.hildan.krossbow.stomp.frame.FrameBody
-import org.hildan.krossbow.stomp.headers.*
+import org.hildan.krossbow.stomp.headers.StompSendHeaders
+import org.hildan.krossbow.stomp.headers.StompSubscribeHeaders
+import org.hildan.krossbow.stomp.headers.copy
+import org.hildan.krossbow.stomp.session.StompReceipt
+import org.hildan.krossbow.stomp.session.StompSession
+import org.hildan.krossbow.stomp.session.topic.TopicStompSession
 
 /**
  * Wraps this [StompSession] to add methods that can convert message bodies using the provided [converter].
  */
-fun StompSession.withTextConversions(converter: TextMessageConverter): TypedStompSession =
+fun TopicStompSession.withTextConversions(converter: TextMessageConverter): TypedStompSession =
     SingleConverterStompSession(this, converter)
 
 /**
@@ -43,9 +48,9 @@ interface TextMessageConverter {
 }
 
 private class SingleConverterStompSession(
-    private val session: StompSession,
+    private val session: TopicStompSession,
     private val converter: TextMessageConverter,
-) : StompSession by session, TypedStompSession {
+) : TopicStompSession by session, TypedStompSession {
 
     private val charset: Charset = extractCharset(converter.mediaType) ?: Charset.UTF_8
     private val sendBinaryFrames: Boolean = charset != Charset.UTF_8

@@ -1,4 +1,4 @@
-package org.hildan.krossbow.stomp
+package org.hildan.krossbow.stomp.session
 
 import org.hildan.krossbow.stomp.frame.FrameBody
 import org.hildan.krossbow.stomp.headers.*

@@ -1,7 +1,7 @@
 package org.hildan.krossbow.stomp.config
 
 import org.hildan.krossbow.stomp.LostReceiptException
-import org.hildan.krossbow.stomp.StompSession
+import org.hildan.krossbow.stomp.session.StompSession
 import org.hildan.krossbow.stomp.instrumentation.KrossbowInstrumentation
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext

@@ -1,4 +1,4 @@
-package org.hildan.krossbow.stomp
+package org.hildan.krossbow.stomp.session
 
 import kotlinx.coroutines.flow.*
 import kotlinx.io.bytestring.*
@@ -6,10 +6,6 @@ import org.hildan.krossbow.stomp.config.*
 import org.hildan.krossbow.stomp.frame.*
 import org.hildan.krossbow.stomp.headers.*
 import org.hildan.krossbow.stomp.utils.*
-
-@RequiresOptIn("This API is unsafe. Make sure you read the documentation and understand the consequences")
-@Retention(AnnotationRetention.BINARY)
-annotation class UnsafeStompSessionApi
 
 /**
  * A coroutine-based STOMP session. This interface defines interactions with a STOMP server.
@@ -97,39 +93,6 @@ interface StompSession {
      */
     // No default value null on purpose, because sendEmptyMsg() should be used if we statically know there is no body
     suspend fun send(headers: StompSendHeaders, body: FrameBody?): StompReceipt?
-
-    /**
-     * Subscribes and returns a [Flow] of [MESSAGE][StompFrame.Message] frames that unsubscribes automatically when the
-     * collector is done or cancelled.
-     * The returned flow can be collected only once.
-     *
-     * The subscription happens immediately by sending a [SUBSCRIBE][StompFrame.Subscribe] frame with the provided
-     * headers.
-     * If no subscription ID is provided in the [headers], a generated ID is used in the SUBSCRIBE frame.
-     *
-     * If no `receipt` header is provided and [auto-receipt][StompConfig.autoReceipt] is enabled, a new unique `receipt`
-     * header is generated and added to the SUBSCRIBE frame.
-     *
-     * If a `receipt` header is present (automatically added or manually provided), this method suspends until the
-     * corresponding RECEIPT frame is received from the server.
-     * If no RECEIPT frame is received in the configured [time limit][StompConfig.receiptTimeout], a
-     * [LostReceiptException] is thrown.
-     *
-     * If auto-receipt is disabled and no `receipt` header is provided, this method doesn't wait for a RECEIPT frame
-     * and never throws [LostReceiptException].
-     * Instead, it returns immediately after sending the SUBSCRIBE frame.
-     * In this case, there is no real guarantee that the subscription actually happened when this method returns.
-     *
-     * The unsubscription happens by sending an `UNSUBSCRIBE` frame when the flow collector's coroutine is canceled, or
-     * when a terminal operator such as [Flow.first][kotlinx.coroutines.flow.first] completes the flow from the
-     * consumer's side.
-     *
-     * See the general [StompSession] documentation for more details about subscription flows, suspension and receipts.
-     *
-     * @see subscribeText
-     * @see subscribeBinary
-     */
-    suspend fun subscribe(headers: StompSubscribeHeaders): Flow<StompFrame.Message>
 
     /**
      * Sends an ACK frame with the given [ackId].
@@ -221,17 +184,6 @@ interface StompSession {
 }
 
 /**
- * A STOMP receipt, as
- * [defined in the STOMP specification](https://stomp.github.io/stomp-specification-1.2.html#RECEIPT).
- */
-data class StompReceipt(
-    /**
-     * The value of the receipt header sent to the server, and returned in a RECEIPT frame.
-     */
-    val id: String
-)
-
-/**
  * Sends a SEND frame to the server at the given [destination] with the given binary [body].
  *
  * @return null right after sending the frame if auto-receipt is disabled.
@@ -265,50 +217,6 @@ suspend fun StompSession.sendText(destination: String, body: String?): StompRece
  * a [LostReceiptException] is thrown.
  */
 suspend fun StompSession.sendEmptyMsg(destination: String): StompReceipt? = send(StompSendHeaders(destination), null)
-
-/**
- * Subscribes and returns a [Flow] of [MESSAGE][StompFrame.Message] frames that unsubscribes automatically when the
- * collector is done or cancelled.
- * The returned flow can be collected only once.
- *
- * See the general [StompSession] documentation for more details about subscription flows, suspension and receipts.
- *
- * @see subscribeBinary
- * @see subscribeText
- */
-suspend fun StompSession.subscribe(destination: String): Flow<StompFrame.Message> =
-    subscribe(StompSubscribeHeaders(destination))
-
-/**
- * Subscribes and returns a [Flow] of text message bodies that unsubscribes automatically when the collector is done or
- * cancelled.
- * The returned flow can be collected only once.
- *
- * The received MESSAGE frames' bodies are expected to be decodable as text: they must come from a textual web socket
- * frame, or their `content-type` header should start with `text/` or contain a `charset` parameter (see
- * [StompFrame.bodyAsText]).
- * If a received frame is not decodable as text, an exception is thrown.
- *
- * Frames without a body are indistinguishable from frames with a 0-length body, and therefore result in an empty
- * string in the subscription flow.
- *
- * See the general [StompSession] documentation for more details about subscription flows, suspension and receipts.
- */
-suspend fun StompSession.subscribeText(destination: String): Flow<String> =
-    subscribe(destination).map { it.bodyAsText }
-
-/**
- * Subscribes and returns a [Flow] of binary message bodies that unsubscribes automatically when the collector is done
- * or cancelled.
- * The returned flow can be collected only once.
- *
- * Frames without a body are indistinguishable from frames with a 0-length body, and therefore result in an empty
- * [ByteArray] in the subscription flow.
- *
- * See the general [StompSession] documentation for more details about subscription flows, suspension and receipts.
- */
-suspend fun StompSession.subscribeBinary(destination: String): Flow<ByteString> =
-    subscribe(destination).map { it.body?.bytes ?: ByteString() }
 
 /**
  * Executes the given [block] as part of a transaction.

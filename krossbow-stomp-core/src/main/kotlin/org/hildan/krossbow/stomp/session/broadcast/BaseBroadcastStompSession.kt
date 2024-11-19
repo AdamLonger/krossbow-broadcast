@@ -5,18 +5,15 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -59,7 +56,7 @@ internal class BaseBroadcastStompSession(
         }
     }
 
-    override val messages: SharedFlow<StompFrame.Message> = sharedStompEvents
+    override val messages: ReceiveChannel<StompFrame.Message> = sharedStompEvents
         .dematerializeErrorsAndCompletion()
         .onCompletion {
             when (it) {
@@ -83,7 +80,7 @@ internal class BaseBroadcastStompSession(
             }
         }
         .filterIsInstance<StompFrame.Message>()
-        .shareIn(scope = scope, started = SharingStarted.Eagerly)
+        .produceIn(scope)
 
     private val mutableDestinations =
         MutableStateFlow<ImmutableSet<String>>(persistentSetOf())
@@ -91,38 +88,21 @@ internal class BaseBroadcastStompSession(
     override val destinations: StateFlow<ImmutableSet<String>> =
         mutableDestinations.asStateFlow()
 
-    private suspend fun subscribe(request: BroadcastTopicRequest.Subscribe) = coroutineScope {
+    private suspend fun subscribe(request: BroadcastTopicRequest.Subscribe) {
         semaphore.withPermit {
             if (destinationRequests.contains(key = request.headers.id)) return@withPermit
             destinationRequests[request.headers.id] = request
 
-            val subscriptionStarted = CompletableDeferred<Unit>()
-            try {
-                // ensures we are already listening for frames before sending SUBSCRIBE, so we don't miss messages
-                prepareHeadersAndSendFrame(StompFrame.Subscribe(request.headers))
-                subscriptionStarted.complete(Unit)
-            } catch (e: Exception) {
-                subscriptionStarted.completeExceptionally(e)
-            }
-            subscriptionStarted.await()
+            prepareHeadersAndSendFrame(StompFrame.Subscribe(request.headers))
         }
     }
 
-    private suspend fun unsubscribe(request: BroadcastTopicRequest.Unsubscribe) = coroutineScope {
+    private suspend fun unsubscribe(request: BroadcastTopicRequest.Unsubscribe) {
         semaphore.withPermit {
             if (!destinationRequests.contains(key = request.headers.id)) return@withPermit
             destinationRequests.remove(request.headers.id)
 
-            val subscriptionStarted = CompletableDeferred<Unit>()
-            try {
-                prepareHeadersAndSendFrame(
-                    StompFrame.Unsubscribe(request.headers)
-                )
-                subscriptionStarted.complete(Unit)
-            } catch (e: Exception) {
-                subscriptionStarted.completeExceptionally(e)
-            }
-            subscriptionStarted.await()
+            prepareHeadersAndSendFrame(StompFrame.Unsubscribe(request.headers))
         }
     }
 
@@ -131,7 +111,4 @@ internal class BaseBroadcastStompSession(
 
     override suspend fun unsubscribeTopic(headers: StompUnsubscribeHeaders) =
         requests.send(BroadcastTopicRequest.Unsubscribe(headers))
-
-    override fun receiveTopicMessages(destination: String): Flow<StompFrame.Message> =
-        messages.filter { it.headers.destination == destination }
 }
